@@ -37,8 +37,9 @@ from backend.app.auth_db import (
     VALID_DECISIONS, update_run_decision
 )
 
+from backend.app.invoice_export_api import router
 app = FastAPI(title="Invoice Automation Pipeline")
-
+app.include_router(router)
 init_auth_db()  # ensures users/pipeline_runs tables + user_id columns exist on startup
 
 # Allow the frontend dev server to call this API during local development.
