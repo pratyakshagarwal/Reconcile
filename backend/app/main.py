@@ -182,7 +182,7 @@ async def process_invoice(
             # Persist this run under the calling user — this is the actual session history.
             db_run_id = insert_pipeline_run(
                 user_id=user_id,
-                invoice_id=None,  # set this once insert_invoice() runs inside your graph and you thread its id back into state
+                invoice_id=final_state.get("invoice_id"),  # set this once insert_invoice() runs inside your graph and you thread its id back into state
                 status=final_status,
                 report=final_report,
             )
