@@ -37,9 +37,7 @@ from backend.app.auth_db import (
     VALID_DECISIONS, update_run_decision
 )
 
-from backend.app.invoice_export_api import router
 app = FastAPI(title="Invoice Automation Pipeline")
-app.include_router(router)
 init_auth_db()  # ensures users/pipeline_runs tables + user_id columns exist on startup
 
 # Allow the frontend dev server to call this API during local development.
@@ -249,3 +247,58 @@ def get_my_run(run_id: int, user_id: int = Depends(get_current_user_id)):
 @app.get("/api/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/invoices")
+def list_invoices(user_id: int = Depends(get_current_user_id), limit: int = 50):
+    """Returns all invoices belonging to this user."""
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute(
+        """SELECT id, invoice_number, vendor_name, invoice_date,
+                  total_amount, tax_amount, currency, created_at
+           FROM invoices
+           WHERE user_id = %s
+           ORDER BY created_at DESC
+           LIMIT %s""",
+        (user_id, limit)
+    )
+    rows = cur.fetchall()
+    cols = [d[0] for d in cur.description]
+    cur.close()
+    conn.close()
+    return [dict(zip(cols, r)) for r in rows]
+
+
+@app.get("/api/invoices/{invoice_id}")
+def get_invoice(invoice_id: int, user_id: int = Depends(get_current_user_id)):
+    """Returns one invoice with its line items, scoped to the requesting user."""
+    conn = get_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        "SELECT * FROM invoices WHERE id = %s AND user_id = %s",
+        (invoice_id, user_id)
+    )
+    row = cur.fetchone()
+    if row is None:
+        cur.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    cols = [d[0] for d in cur.description]
+    invoice = dict(zip(cols, row))
+
+    cur.execute(
+        "SELECT description, quantity, unit_price FROM invoice_line_items WHERE invoice_id = %s",
+        (invoice_id,)
+    )
+    items = cur.fetchall()
+    invoice["line_items"] = [
+        {"description": d, "quantity": q, "unit_price": p}
+        for d, q, p in items
+    ]
+
+    cur.close()
+    conn.close()
+    return invoice
