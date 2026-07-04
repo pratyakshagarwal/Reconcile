@@ -31,6 +31,7 @@ function showView(name) {
   els.viewUpload.hidden = name !== "upload";
   els.viewPipeline.hidden = name !== "pipeline";
   els.viewReport.hidden = name !== "report";
+  document.getElementById("viewInvoices").hidden = name !== "invoices";
 }
 
 els.newInvoiceBtn.addEventListener("click", () => {
