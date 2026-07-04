@@ -66,6 +66,12 @@
       <input type="text" id="searchInput" placeholder="Search vendor or invoice no.">
     </div>
 
+    <div class="ledger-tabs" id="ledgerTabs">
+      <button class="ledger-tab active" data-tab="pending">Pending</button>
+      <button class="ledger-tab" data-tab="approved">Approved</button>
+      <button class="ledger-tab" data-tab="declined">Declined</button>
+    </div>
+
     <div class="ledger-list" id="ledgerList">
       <!-- populated by JS -->
       <div class="ledger-empty" id="ledgerEmpty">
