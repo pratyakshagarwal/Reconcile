@@ -155,6 +155,7 @@ async def process_invoice(
         "invoice_path": invoice_path,
         "po_path": po_path,
         "gr_path": gr_path,
+        "user_id": user_id ,
     }
 
     async def event_generator():

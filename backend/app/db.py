@@ -99,12 +99,12 @@ def check_duplicate(invoice: dict) -> bool:
 
 # ---------- Insert invoice + its line items ----------
 
-def insert_invoice(invoice: dict) -> int:
+def insert_invoice(invoice: dict, user_id:int) -> int:
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        """INSERT INTO invoices (vendor_name, invoice_number, po_number, total_amount, tax_amount, currency, invoice_date)
-           VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """INSERT INTO invoices (vendor_name, invoice_number, po_number, total_amount, tax_amount, currency, invoice_date, user_id)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
            RETURNING id""",
         (
             invoice["vendor_name"].strip().lower(),
@@ -114,6 +114,7 @@ def insert_invoice(invoice: dict) -> int:
             invoice.get("tax_amount"),
             invoice.get("currency"),
             invoice.get("invoice_date"),
+            user_id,
         )
     )
     invoice_id = cur.fetchone()[0]

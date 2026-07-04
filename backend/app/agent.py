@@ -23,6 +23,7 @@ class PipelineState(TypedDict):
     invoice_id: Optional[int]
     po: Optional[dict]
     gr: Optional[dict]
+    user_id: Optional[int]
     invoice_confidences: Optional[dict]
     is_valid: Optional[bool]
     validation_errors: Optional[list]
@@ -89,7 +90,7 @@ def duplicate_node(state: PipelineState) -> PipelineState:
         else:
             insert_fn(data)
 
-    invoice_id = insert_invoice(state["invoice"])
+    invoice_id = insert_invoice(state["invoice"], state['user_id'])
 
     return {
         **state,
