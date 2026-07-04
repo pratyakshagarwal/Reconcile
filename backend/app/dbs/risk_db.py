@@ -48,7 +48,7 @@ def insert_reviewer_decision(
         (
             invoice_id,
             reviewer_id,
-            vendor_name,
+            vendor_name.strip().lower(),
             decision,
             risk_score_at_decision,
             json.dumps(risk_factors),
