@@ -181,6 +181,12 @@
           <div class="report-tags" id="reportClassBreakdown"></div>
         </div>
 
+        <!-- Explanation -->
+        <div class="report-card" id="reportExplanationSection" hidden>
+          <h2>Explanation</h2>
+          <p class="report-explanation-text" id="reportExplanation"></p>
+        </div>
+
         <div class="report-card">
           <h2>Risk</h2>
           <p class="report-status" id="reportRisk">—</p>
@@ -195,6 +201,16 @@
       </div>
 
       <div class="decision-actions" id="decisionActions" hidden>
+        <textarea
+          id="reviewerNote"
+          class="reviewer-note"
+          placeholder="Add a note (optional)..."
+          rows="2"
+        ></textarea>
+        <div class="decision-btns">
+          <button class="btn-approve" id="approveBtn">Approve</button>
+          <button class="btn-reject" id="rejectBtn">Reject</button>
+        </div>
         <button class="btn-approve" id="approveBtn">Approve</button>
         <button class="btn-reject" id="rejectBtn">Reject</button>
       </div>
