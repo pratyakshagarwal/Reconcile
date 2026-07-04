@@ -66,12 +66,6 @@
       <input type="text" id="searchInput" placeholder="Search vendor or invoice no.">
     </div>
 
-    <div class="ledger-tabs" id="ledgerTabs">
-      <button class="ledger-tab active" data-tab="pending">Pending</button>
-      <button class="ledger-tab" data-tab="approved">Approved</button>
-      <button class="ledger-tab" data-tab="declined">Declined</button>
-    </div>
-
     <div class="ledger-list" id="ledgerList">
       <!-- populated by JS -->
       <div class="ledger-empty" id="ledgerEmpty">
@@ -81,9 +75,11 @@
     </div>
 
     <div class="ledger-footer">
-      <a href="dashboard.html" style="display: block; margin-bottom: 10px; padding: 8px 12px; background: #333; color: white; border-radius: 4px; text-align: center; text-decoration: none; font-size: 12px; font-weight: 600;">Dashboard</a>
       <span class="ledger-user-email" id="ledgerUserEmail"></span>
-      <button class="btn-logout" id="logoutBtn">Log out</button>
+      <div class="ledger-footer-btns">
+        <button class="btn-invoices" id="myInvoicesBtn">My Invoices</button>
+        <button class="btn-logout" id="logoutBtn">Log out</button>
+      </div>
     </div>
   </aside>
 
@@ -179,12 +175,6 @@
           <div class="report-tags" id="reportClassBreakdown"></div>
         </div>
 
-        <!-- Explanation -->
-        <div class="report-card" id="reportExplanationSection" hidden>
-          <h2>Explanation</h2>
-          <p class="report-explanation-text" id="reportExplanation"></p>
-        </div>
-
         <div class="report-card">
           <h2>Risk</h2>
           <p class="report-status" id="reportRisk">—</p>
@@ -199,20 +189,70 @@
       </div>
 
       <div class="decision-actions" id="decisionActions" hidden>
-        <textarea
-          id="reviewerNote"
-          class="reviewer-note"
-          placeholder="Add a note (optional)..."
-          rows="2"
-        ></textarea>
-        <div class="decision-btns">
-          <button class="btn-approve" id="approveBtn">Approve</button>
-          <button class="btn-reject" id="rejectBtn">Reject</button>
-        </div>
+        <button class="btn-approve" id="approveBtn">Approve</button>
+        <button class="btn-reject" id="rejectBtn">Reject</button>
       </div>
       <p class="decision-result" id="decisionResult"></p>
 
       <button class="btn-secondary" id="backToUploadBtn">Process another invoice</button>
+    </section>
+
+    <!-- ---- VIEW: MY INVOICES ---- -->
+    <section class="view view-invoices" id="viewInvoices" hidden>
+      <header class="view-header">
+        <div>
+          <h1>My Invoices</h1>
+          <p class="view-sub">All invoices extracted and processed through your pipeline.</p>
+        </div>
+        <button class="btn-secondary" id="backFromInvoicesBtn">← Back</button>
+      </header>
+
+      <!-- Invoice list -->
+      <div id="invoiceListContainer">
+        <div class="invoice-list-empty" id="invoiceListEmpty" hidden>
+          <p>No invoices found.</p>
+        </div>
+        <table class="invoice-table" id="invoiceTable" hidden>
+          <thead>
+            <tr>
+              <th>Invoice #</th>
+              <th>Vendor</th>
+              <th>Date</th>
+              <th>Amount</th>
+              <th>Currency</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="invoiceTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Invoice detail panel (shown when a row is clicked) -->
+      <div class="invoice-detail-panel" id="invoiceDetailPanel" hidden>
+        <div class="invoice-detail-header">
+          <h2 id="detailInvoiceNumber">—</h2>
+          <div class="invoice-detail-actions">
+            <button class="btn-download" id="downloadJsonBtn">Download JSON</button>
+            <button class="btn-download" id="downloadCsvBtn">Download CSV</button>
+            <button class="btn-secondary btn-small" id="closeDetailBtn">✕ Close</button>
+          </div>
+        </div>
+
+        <div class="invoice-detail-grid" id="invoiceDetailGrid"></div>
+
+        <h3 class="detail-section-title">Line Items</h3>
+        <table class="invoice-table" id="lineItemsTable">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th>Qty</th>
+              <th>Unit Price</th>
+              <th>Amount</th>
+            </tr>
+          </thead>
+          <tbody id="lineItemsBody"></tbody>
+        </table>
+      </div>
     </section>
 
   </main>
@@ -225,5 +265,6 @@
 <script src="js/pipeline.js"></script>
 <script src="js/report.js"></script>
 <script src="js/history.js"></script>
+<script src="js/invoices.js"></script>
 </body>
 </html>
