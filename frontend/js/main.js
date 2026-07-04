@@ -22,6 +22,7 @@ const els = {
   newInvoiceBtn: document.getElementById("newInvoiceBtn"),
   backToUploadBtn: document.getElementById("backToUploadBtn"),
   searchInput: document.getElementById("searchInput"),
+  viewInvoices: document.getElementById("viewInvoices"),
 };
 
 /* ============================================================
@@ -31,7 +32,9 @@ function showView(name) {
   els.viewUpload.hidden = name !== "upload";
   els.viewPipeline.hidden = name !== "pipeline";
   els.viewReport.hidden = name !== "report";
-  document.getElementById("viewInvoices").hidden = name !== "invoices";
+  if (els.viewInvoices) {
+    els.viewInvoices.hidden = name !== "invoices";
+  }
 }
 
 els.newInvoiceBtn.addEventListener("click", () => {
@@ -51,5 +54,5 @@ els.backToUploadBtn.addEventListener("click", () => showView("upload"));
 if (getToken()) {
   enterApp();
 } else {
-  showAuthScreen();
+  showAuthScreen(); 
 }
