@@ -13,23 +13,23 @@ pinned: false
 
 AI-powered finance backend.
 
+-------------
+
 # Reconcile
 
-An agentic accounts-payable automation system for invoice extraction, validation, 3-way matching, anomaly detection, risk scoring, and approval orchestration.
+Agentic accounts-payable automation for invoice extraction, validation, 3-way matching, anomaly detection, adaptive risk scoring, and approval orchestration.
 
 Built with LangGraph, FastAPI, Gemini, Supabase, and a live streaming frontend.
 
 ---
 
-## Live Demo
+# Live Demo
 
 Frontend: https://reconcile-kqsc.vercel.app/
 
 ### Demo Video
 
 [Watch the demo](https://github.com/user-attachments/assets/1da1f596-7577-42e4-a270-081f3ea4aa21)
-
-### Final Processed Invoice UI
 
 ---
 
@@ -48,7 +48,8 @@ The system processes invoices through a multi-agent workflow that:
 7. Detects vendor-level anomalies
 8. Routes invoices through approval workflows
 9. Generates human-readable audit explanations
-10. Maintains a complete audit trail
+10. Learns from reviewer decisions over time
+11. Maintains a complete audit trail
 
 Every stage runs inside a LangGraph workflow and streams live updates to the frontend via Server-Sent Events (SSE).
 
@@ -56,33 +57,63 @@ The system is designed around operational auditability rather than a single opaq
 
 ---
 
-# v1.1 Improvements
+# v1.2 Improvements
 
-Reconcile v1.1 focuses on trust, reviewability, and human-in-the-loop workflows.
+Reconcile v1.2 focuses on adaptive review workflows and human feedback loops.
 
-### Confidence-Aware Extraction
+### Reviewer Feedback Learning Loop
 
-Extraction confidence now propagates through downstream stages, allowing uncertain OCR/extraction outputs to influence risk scoring.
+Reviewer decisions now persist vendor-level approval history.
 
-### Vendor Anomaly History
+When flagged invoices are approved or rejected, the system stores that decision and incorporates it into future risk evaluations.
 
-Risk analysis now considers historical vendor behavior and detects abnormal invoice patterns or amount deviations.
+This allows the risk engine to adapt over time:
 
-### Human Review Dashboard
+* Vendors with strong approval histories receive lower downstream risk weighting
+* Vendors with repeated rejections are escalated more aggressively
+* Human review decisions compound instead of disappearing after each workflow run
 
-Flagged invoices can now be reviewed, approved, or rejected through a dedicated review workflow.
+This is a lightweight implementation of the kind of reviewer-feedback systems used in production AP platforms.
 
-### AI-Generated Audit Explanations
+---
 
-The pipeline generates concise natural-language explanations for flagged invoices.
+### Redesigned Review Workflow UI
 
-Example:
+The review dashboard now supports:
 
-> "Flagged because the invoice amount is significantly higher than historical vendor averages and multiple billed items are missing from the goods receipt."
+* Reviewer notes alongside approve/reject decisions
+* Dedicated invoice review pages
+* Clear workflow segmentation with:
+
+  * Pending
+  * Approved
+  * Declined
+
+instead of a single flat review queue.
+
+---
+
+### Invoice Management View
+
+Users can now:
+
+* Browse all processed invoices
+* Inspect completed workflow outputs
+* Download invoice results as:
+
+  * JSON
+  * CSV
+
+---
+
+### Reliability Improvements
+
+Several backend endpoint and database edge-case bugs were fixed to reduce silent workflow failures and improve pipeline stability.
 
 ---
 
 # Pipeline
+
 ```text
 Upload Invoice (+ optional PO / GR)
         │
@@ -102,7 +133,13 @@ Upload Invoice (+ optional PO / GR)
 5. Classification
         │
         ▼
-6. Risk Scoring (incorporates vendor anomaly analysis)
+6. Adaptive Risk Scoring
+   ├── Extraction Confidence
+   ├── Validation Errors
+   ├── Matching Failures
+   ├── Duplicate Signals
+   ├── Vendor Anomalies
+   └── Reviewer Feedback History
         │
         ▼
 7. Approval Routing
@@ -111,12 +148,13 @@ Upload Invoice (+ optional PO / GR)
 8. Audit Report + AI Explanation
         │
         ▼
-   ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-   Human Review (async, post-completion)
-   Flagged reports can be approved or
-   rejected from the dashboard at any
-   time after the run finishes.
+   ───────────────────────────────
+   Human Review Dashboard
+   Approve / Reject / Add Notes
+   Decisions persist into future
+   vendor risk evaluations
 ```
+
 ---
 
 # Core Features
@@ -139,11 +177,11 @@ Compares:
 * Purchase Order
 * Goods Receipt
 
-Line-by-line with configurable tolerances and severity-tagged discrepancies.
+line-by-line with configurable tolerances and severity-tagged discrepancies.
 
 ---
 
-## Confidence-Aware Risk Analysis
+## Adaptive Risk Analysis
 
 Risk scoring incorporates:
 
@@ -152,24 +190,39 @@ Risk scoring incorporates:
 * Duplicate signals
 * Vendor anomalies
 * Validation errors
+* Historical reviewer decisions
 
 ---
 
 ## Vendor-Aware Anomaly Detection
 
-Detects abnormal vendor behavior using historical invoice patterns and amount deviations.
+Detects abnormal vendor behavior using:
+
+* Historical invoice patterns
+* Amount deviations
+* Vendor review history
+* Repeated rejection patterns
 
 ---
 
 ## Human Review Workflow
 
-Flagged invoices route into a review dashboard where reviewers can approve or reject invoices.
+Flagged invoices route into a review dashboard where reviewers can:
+
+* Approve invoices
+* Reject invoices
+* Leave reviewer notes
+* Inspect prior decisions
 
 ---
 
 ## AI Audit Explanations
 
 Transforms raw risk signals into concise audit-readable explanations for AP reviewers.
+
+Example:
+
+> "Flagged because the invoice amount is significantly higher than historical vendor averages and multiple billed items are missing from the goods receipt."
 
 ---
 
@@ -210,8 +263,9 @@ FastAPI Backend (HF Spaces)
         │
         ├── LangGraph Workflow
         ├── Gemini Extraction
-        ├── Matching + Risk Engine
-        ├── Vendor Anomaly Analysis
+        ├── Matching Engine
+        ├── Adaptive Risk Engine
+        ├── Vendor Feedback History
         ├── AI Explanation Layer
         └── SSE Streaming
                 │
@@ -286,7 +340,7 @@ http://localhost:8080
 
 # Current Limitations
 
-Reconcile is still a portfolio / research-style system rather than a production AP platform.
+Reconcile is still a portfolio/research-style system rather than a production AP platform.
 
 Current limitations include:
 
@@ -296,7 +350,8 @@ Current limitations include:
 * Synchronous workflow execution
 * Limited reviewer collaboration tooling
 * Matching optimized for relatively structured invoices
-* No continuous learning from reviewer feedback
+* Reviewer feedback learning is heuristic rather than model-trained
+* Limited policy configurability
 
 ---
 
@@ -307,14 +362,23 @@ Most invoice AI demos stop at OCR extraction.
 The harder operational problem is determining whether an invoice should actually be paid.
 
 Reconcile focuses on the workflow layer:
-validation, reconciliation, anomaly detection, auditability, escalation, and approval orchestration.
+
+* validation
+* reconciliation
+* anomaly detection
+* auditability
+* escalation
+* approval orchestration
+* reviewer feedback loops
+
+instead of treating invoice processing as a single extraction problem.
 
 ---
 
 # Future Improvements
 
 * Async/concurrent workflow execution
-* Reviewer feedback learning loops
+* Model-trained reviewer feedback learning
 * Adaptive approval policies
 * ERP integrations
 * Multi-user review collaboration
@@ -323,4 +387,6 @@ validation, reconciliation, anomaly detection, auditability, escalation, and app
 * Advanced handling for noisy enterprise scans
 * Analytics dashboards
 * Policy-based workflow configuration
+* Vendor graph analysis
+* Continuous reviewer calibration
 
