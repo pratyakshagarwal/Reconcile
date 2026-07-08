@@ -41,7 +41,7 @@ from backend.app.auth_db import (
 )
 
 app = FastAPI(title="Invoice Automation Pipeline")
-init_auth_db()  # ensures users/pipeline_runs tables + user_id columns exist on startup
+# init_auth_db()  # ensures users/pipeline_runs tables + user_id columns exist on startup
 
 # Allow the frontend dev server to call this API during local development.
 # Tighten allow_origins to your actual deployed frontend URL before shipping.
@@ -302,7 +302,93 @@ def get_invoice(invoice_id: int, user_id: int = Depends(get_current_user_id)):
         {"description": d, "quantity": q, "unit_price": p}
         for d, q, p in items
     ]
-
+    cur.execute("""
+    SELECT id
+    FROM pipeline_runs
+    WHERE invoice_id = %s
+    AND user_id = %s  
+    """, (invoice_id, user_id))
+    run = cur.fetchone()
+    if run is None: raise HTTPException(status_code=404, detail="For this User and particular invoice run not found")
+    invoice["run_id"] = run[0] if run else None
     cur.close()
     conn.close()
     return invoice
+
+ 
+@app.get("/api/purchase_orders/{po_id}")
+def get_purchase_order(po_id: str):
+    "Returns one purchase order with its line iterms, scoped to the requseted invoice"
+    conn = get_connection()
+    curr = conn.cursor()
+
+    curr.execute("SELECT * FROM purchase_orders WHERE po_number = %s", (po_id,))
+    row = curr.fetchone()
+    if row is None:
+        curr.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Purchase order not found.")
+    
+    cols = [d[0] for d in curr.description]
+    purchase_order = dict(zip(cols, row))
+
+    curr.execute(
+        "SELECT description, quantity, unit_price FROM po_line_items WHERE po_id = %s",
+        (purchase_order['id'],)
+    )
+    items = curr.fetchall()
+    purchase_order["line_items"] = [
+        {"description": d, "quantity": q, "unit_price": p}
+        for d, q, p in items
+    ]
+    curr.close()
+    conn.close()
+    return purchase_order
+
+@app.get("/api/goods_receipts/{po_id}")
+def get_goods_receipt(po_id:str):
+    "Returns one goods receipt with its line iterms, scoped to the requseted invoice"
+    conn = get_connection()
+    curr = conn.cursor()
+    curr.execute("SELECT * FROM goods_receipts WHERE po_number = %s", (po_id,))
+    row = curr.fetchone()
+    if row is None:
+        curr.close()
+        conn.close()
+        raise HTTPException(status_code=404, detail="Goods Receipt  not found.")
+    
+    cols = [d[0] for d in curr.description]
+    goods_receipt = dict(zip(cols, row))
+
+    curr.execute(
+        "SELECT description, quantity_received FROM gr_line_items WHERE gr_id = %s",
+        (goods_receipt['id'],)
+    )
+    items = curr.fetchall()
+    goods_receipt["line_items"] = [
+        {"description": d, "quantity": q}
+        for d, q in items
+    ]
+    curr.close()
+    conn.close()
+    return goods_receipt
+
+
+@app.get("/api/runs/{run_id}/mismatches")
+def get_mismatches(run_id: int, user_id:int=Depends(get_current_user_id)):
+    conn = get_connection()
+    curr = conn.cursor()
+    try:
+        curr.execute("""
+            SELECT report 
+            FROM pipeline_runs
+            WHERE id = %s AND user_id = %s
+        """, (run_id, user_id))
+        run = curr.fetchone()
+        if run == None:
+            raise HTTPException(status_code=404, detail="For particular user run not found")
+        mismatches = run[0]['stages']['matching']
+    finally:
+        curr.close()
+        conn.close()
+    return mismatches
