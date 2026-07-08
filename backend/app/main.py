@@ -9,6 +9,9 @@ Protected routes (require Authorization: Bearer <token>):
   POST /api/process        — upload invoice (+ optional PO/GR), stream node-by-node results via SSE
   GET  /api/runs            — list THIS user's past pipeline runs (session history)
   GET  /api/runs/{run_id}   — full report for one of THIS user's past runs
+  POST /api/runs/{run_id}/decide  -- Approved or Decline for that process
+  GET /api/invoices/          - List the invoices with user_id in stored 
+  GET /api/invoices/{invoice_id} extract a particular invoice based on invoice id return invoice data 
   j
 Run with: uvicorn app.main:app --reload
 """
