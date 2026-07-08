@@ -236,3 +236,12 @@ def migrate_invoices_table():
     conn.close()
 
 
+def migrate_purchase_ordertable():
+    conn = get_connection()
+    curr = conn.cursor()
+
+    curr.execute("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS invoice_id TEXT ")
+    conn.commit()
+    curr.close()
+    conn.close()
+    
