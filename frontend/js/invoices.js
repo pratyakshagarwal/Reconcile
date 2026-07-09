@@ -130,6 +130,9 @@ function renderInvoiceDetail(inv) {
 
   document.getElementById("invoiceDetailPanel").hidden = false;
   document.getElementById("invoiceDetailPanel").scrollIntoView({ behavior: "smooth", block: "start" });
+  document
+    .getElementById("compareDocumentsBtn")
+    .onclick = () => loadComparison(inv);
 }
 
 /* ============================================================
