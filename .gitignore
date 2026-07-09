@@ -11,7 +11,7 @@ notebooks
 *.pyc
 
 # virutal enviorment
-/revn
+renv/
 
 # future improvemennts and plan
 todo.txt
