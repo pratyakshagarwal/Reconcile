@@ -257,6 +257,7 @@
           <div class="invoice-detail-actions">
             <button class="btn-download" id="downloadJsonBtn">Download JSON</button>
             <button class="btn-download" id="downloadCsvBtn">Download CSV</button>
+            <button class="btn-secondary" id="compareDocumentsBtn">Compare Documents</button>
             <button class="btn-secondary btn-small" id="closeDetailBtn">✕ Close</button>
           </div>
         </div>
@@ -277,6 +278,21 @@
         </table>
       </div>
     </section>
+    <section id="comparisonPanel" class="comparison-panel" hidden>
+    <div class="comparison-header">
+        <h2>3-Way Document Comparison</h2>
+        <button id="closeComparisonBtn" class="btn-secondary">
+            Close
+        </button>
+    </div>
+
+    <p class="comparison-subtitle">
+        Compare Invoice, Purchase Order and Goods Receipt side by side.
+    </p>
+    <div id="comparisonSummary"></div>
+    <div id="comparisonFields"></div>
+    <div id="comparisonLineItems" class="comparison-line-items"></div>
+</section>
 
   </main>
 </div>
@@ -289,5 +305,6 @@
 <script src="js/report.js"></script>
 <script src="js/history.js"></script>
 <script src="js/invoices.js"></script>
+<script src="js/comparison.js"></script>
 </body>
 </html>
