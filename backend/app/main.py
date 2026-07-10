@@ -28,6 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, EmailStr
+from email_validator import validate_email, EmailNotValidError
 
 # These import from your existing pipeline module — adjust the import path
 # to wherever create_graph/nodes/paths actually live in your project.
@@ -74,6 +75,17 @@ def home():
 
 @app.post("/api/auth/signup", response_model=TokenResponse)
 def signup(payload: SignupRequest):
+    try:
+        validated = validate_email(
+            payload.email,
+            check_deliverability=True
+        )
+        email = validated.normalized
+    except EmailNotValidError as e:
+        raise HTTPException(
+            status_code=400,
+            detail=str(e)
+        )
     if len(payload.password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
 
