@@ -13,7 +13,25 @@ from backend.app.risk_analysis import assess_risk
 from backend.app.approval import route_approval
 from backend.app.report import generate_report
 from backend.app.helper import extract_confidences, unwrap_confident_fields
+from backend.app.anomaly_detection.train import train_all
+from backend.app.anomaly_detection.predict import load_models, detect_anomaly
+from backend.app.anomaly_detection.data_handling import build_features
+import pandas as pd
 
+def startup_train():
+    try:
+        from backend.app.anomaly_detection.data_handling import get_invoice_sample
+        df = get_invoice_sample()
+        if len(df) >= 5:
+            train_all(df)
+            print(f"Anomaly models trained on {len(df)} invoices.")
+        else:
+            print("Not enough invoice data to train anomaly models yet.")
+    except Exception as e:
+        print(f"Anomaly model training skipped: {e}")
+
+startup_train()
+_anomaly_models = load_models()  # load once into memory, reused per request
 
 class PipelineState(TypedDict):
     invoice_path: str
@@ -30,6 +48,7 @@ class PipelineState(TypedDict):
     is_duplicate: Optional[bool]
     match_result: Optional[dict]
     classification: Optional[dict]
+    anomaly_result: Optional[dict] 
     risk: Optional[dict]
     approval: Optional[dict]
     report: Optional[dict]
@@ -110,9 +129,21 @@ def matching_node(state: PipelineState) -> PipelineState:
 def classification_node(state: PipelineState) -> PipelineState:
     return {**state, "classification": classify_invoice(state["invoice"])}
 
+def anomaly_node(state: PipelineState) -> PipelineState:
+    if not state.get("invoice"):
+        return {**state, "anomaly_result": None}
+
+    result = detect_anomaly(
+        models=_anomaly_models,
+        invoice=state["invoice"],
+        user_id=state.get("user_id"),
+    )
+    return {**state, "anomaly_result": result}
+
 def risk_node(state: PipelineState) -> PipelineState:
     match_result = MatchResult(**state["match_result"])
-    risk = assess_risk(state["invoice"], match_result, state['invoice_confidences'])
+    anomaly = state.get("anomaly_result") or {}
+    risk = assess_risk(state["invoice"], match_result, state['invoice_confidences'], anomaly)
     return {**state, "risk": risk}
 
 
@@ -149,6 +180,7 @@ nodes = [
     ('duplicate_detect', duplicate_node),
     ('3_way_matching', matching_node),
     ('classify', classification_node),
+    ('anomaly_detect', anomaly_node),
     ('risk_analysis', risk_node),
     ('approval', approval_node),
     ('report_gen', report_node)
@@ -160,7 +192,8 @@ paths = [
     ('validation', route_after_validation, 'conditional_routing'),
     ('duplicate_detect', route_after_duplicate, 'conditional_routing'),
     ('3_way_matching', 'classify'),
-    ('classify', 'risk_analysis'),
+    ("classify", "anomaly_detect"),
+    ("anomaly_detect", "risk_analysis"),
     ('risk_analysis', 'approval'),
     ('approval', 'report_gen'),
     ('report_gen', END)
