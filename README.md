@@ -22,7 +22,10 @@ Frontend:
 https://reconcile-kqsc.vercel.app/
 
 Demo Video:
-https://github.com/user-attachments/assets/fb93f1d8-7073-4549-b9b6-3b862dfbe5aa
+
+<video src="https://github.com/user-attachments/assets/fb93f1d8-7073-4549-b9b6-3b862dfbe5aa" width="100%" controls>
+  Your browser does not support the video tag.
+</video>
 
 ---
 
