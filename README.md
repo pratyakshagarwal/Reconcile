@@ -22,7 +22,7 @@ Frontend:
 https://reconcile-kqsc.vercel.app/
 
 Demo Video:
-https://github.com/user-attachments/assets/1da1f596-7577-42e4-a270-081f3ea4aa21
+https://github.com/pratyakshagarwal/Reconcile/issues/24#issue-4861231131
 
 ---
 
