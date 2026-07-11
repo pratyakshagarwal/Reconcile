@@ -122,5 +122,22 @@ def process_context(report: dict) -> dict:
         "signals": signals
     }
 
+import numpy as np
+
+def jsonable(value):
+    if value is None:
+        return None
+    if isinstance(value, (np.bool_, np.integer, np.floating)):
+        return value.item()  # converts numpy scalar to native Python type
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if isinstance(value, dict):
+        return {k: jsonable(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [jsonable(i) for i in value]
+    return value
+
 
 if __name__ == '__main__':pass
