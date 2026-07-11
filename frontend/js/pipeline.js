@@ -9,6 +9,7 @@ const NODE_SEQUENCE = [
   { key: "duplicate_detect", label: "Checking for duplicates" },
   { key: "3_way_matching", label: "Matching invoice against PO/GR" },
   { key: "classify", label: "Classifying expense category" },
+  {key: "anomaly_detect",  label: "Detecting Invoice Based on History"},
   { key: "risk_analysis", label: "Assessing risk" },
   { key: "approval", label: "Routing for approval" },
   { key: "report_gen", label: "Generating report" },
@@ -86,12 +87,15 @@ function buildStageList() {
     row.className = "stage-row";
     row.id = `stage-${node.key}`;
     row.innerHTML = `
-      <span class="stage-num">${String(i + 1).padStart(2, "0")}</span>
-      <span class="stage-stamp">✓</span>
-      <span class="stage-body">
-        <span class="stage-label">${node.label}</span>
-        <span class="stage-detail"></span>
-      </span>
+      <div class="stage-row-main">
+        <span class="stage-num">${String(i + 1).padStart(2, "0")}</span>
+        <span class="stage-stamp">✓</span>
+        <span class="stage-body">
+          <span class="stage-label">${node.label}</span>
+          <span class="stage-detail"></span>
+        </span>
+      </div>
+      <div class="stage-logs" hidden></div>
     `;
     els.stageList.appendChild(row);
   });
@@ -152,16 +156,60 @@ function handleStreamEvent(eventName, data) {
       detail.classList.add("flagged-text");
     }
     detail.textContent = summary.text;
+
+    // Attach expandable logs if this node produced any
+    const logs = extractStageLogs(data.node, data.state_delta);
+    if (logs.length) {
+      attachStageLogs(row, logs);
+    }
   }
 
   if (eventName === "done") {
-    currentRunId = data.run_id; // tracks which run is shown, used by Approve/Reject (report.js)
+    currentRunId = data.run_id;
     setTimeout(() => renderReport(data.report, data.status), 500);
   }
 
   if (eventName === "error") {
     markPipelineError(`Error: ${data.message}`);
   }
+}
+
+function extractStageLogs(node, delta) {
+  if (!delta) return [];
+  // Pull logs from wherever this node stores them in state
+  if (node === "anomaly_detect") {
+    return delta.anomaly_result?.logs || [];
+  }
+  if (node === "risk_analysis") {
+    return delta.risk?.reasons || [];
+  }
+  if (node === "3_way_matching") {
+    return (delta.match_result?.issues || []).map(
+      i => `${i.field}: expected ${i.expected}, got ${i.actual} [${i.severity}]`
+    );
+  }
+  return [];
+}
+
+function attachStageLogs(row, logs) {
+  const logsDiv = row.querySelector(".stage-logs");
+  if (!logsDiv) return;
+
+  logs.forEach(log => {
+    const p = document.createElement("p");
+    p.className = "stage-log-line";
+    p.textContent = log;
+    logsDiv.appendChild(p);
+  });
+
+  logsDiv.hidden = false; // show once logs exist
+  row.classList.add("has-logs");
+
+  // Click the main row area to toggle logs open/closed
+  row.querySelector(".stage-row-main").addEventListener("click", () => {
+    logsDiv.hidden = !logsDiv.hidden;
+    row.classList.toggle("logs-open", !logsDiv.hidden);
+  });
 }
 
 /* Produces a one-line human summary for each node's result, shown under the stage label. */
