@@ -808,3 +808,52 @@ ledger-footer-btns {
     background:#fee2e2;
     color:#991b1b;
 }
+
+.stage-row {
+  display: flex;
+  flex-direction: column;      /* ← change this */
+  border-bottom: 1px solid var(--rule-soft);
+  opacity: 0.35;
+  transition: opacity 0.3s ease;
+}
+
+.stage-row-main {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 4px;
+}
+
+.stage-row.has-logs .stage-row-main {
+  cursor: pointer;
+}
+.stage-row.has-logs .stage-row-main:hover {
+  background: var(--paper);
+}
+
+/* Expand arrow on rows that have logs */
+.stage-row.has-logs .stage-row-main::after {
+  content: "▸";
+  font-size: 10px;
+  color: var(--ink-faint);
+  margin-left: auto;
+  padding-right: 4px;
+  transition: transform 0.15s ease;
+}
+.stage-row.logs-open .stage-row-main::after {
+  transform: rotate(90deg);
+}
+
+.stage-logs {
+  padding: 8px 16px 12px 74px;
+  border-top: 1px solid var(--rule-soft);
+}
+
+.stage-log-line {
+  margin: 0 0 4px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+.stage-log-line:last-child { margin-bottom: 0; }

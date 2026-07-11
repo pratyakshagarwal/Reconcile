@@ -41,7 +41,7 @@
 
 <div class="app" id="app" hidden>
 
-  <!-- ============ SIDEBAR: LEDGER / HISTORY ============ -->
+  <!-- ============ SIDEBAR ============ -->
   <aside class="ledger">
     <div class="ledger-header">
       <div class="brand">
@@ -77,7 +77,6 @@
     </div>
 
     <div class="ledger-list" id="ledgerList">
-      <!-- populated by JS -->
       <div class="ledger-empty" id="ledgerEmpty">
         <p>No invoices processed yet.</p>
         <p class="ledger-empty-sub">Upload one to begin.</p>
@@ -144,12 +143,14 @@
         <p class="view-sub" id="pipelineSub">Each stage runs in sequence — watch the ledger stamp as it goes.</p>
       </header>
 
-      <div class="stage-list" id="stageList">
-        <!-- populated by JS: one .stage-row per node -->
-      </div>
+      <!-- stage-list is populated by pipeline.js — each row has:
+           .stage-row-main  (stamp + label + detail, always visible)
+           .stage-logs      (expandable log lines, hidden until populated)
+      -->
+      <div class="stage-list" id="stageList"></div>
     </section>
 
-    <!-- ---- VIEW: REPORT (final result, or selected from history) ---- -->
+    <!-- ---- VIEW: REPORT ---- -->
     <section class="view view-report" id="viewReport" hidden>
       <header class="view-header view-header-report">
         <div>
@@ -185,7 +186,7 @@
           <div class="report-tags" id="reportClassBreakdown"></div>
         </div>
 
-        <!-- Explanation -->
+        <!-- Explanation — hidden until the pipeline produces one -->
         <div class="report-card" id="reportExplanationSection" hidden>
           <h2>Explanation</h2>
           <p class="report-explanation-text" id="reportExplanation"></p>
@@ -204,6 +205,7 @@
 
       </div>
 
+      <!-- Human review: note + approve/reject -->
       <div class="decision-actions" id="decisionActions" hidden>
         <textarea
           id="reviewerNote"
@@ -214,7 +216,9 @@
         <div class="decision-btns">
           <button class="btn-approve" id="approveBtn">Approve</button>
           <button class="btn-reject" id="rejectBtn">Reject</button>
+        </div>
       </div>
+
       <p class="decision-result" id="decisionResult"></p>
 
       <button class="btn-secondary" id="backToUploadBtn">Process another invoice</button>
@@ -230,7 +234,6 @@
         <button class="btn-secondary" id="backFromInvoicesBtn">← Back</button>
       </header>
 
-      <!-- Invoice list -->
       <div id="invoiceListContainer">
         <div class="invoice-list-empty" id="invoiceListEmpty" hidden>
           <p>No invoices found.</p>
@@ -250,7 +253,7 @@
         </table>
       </div>
 
-      <!-- Invoice detail panel (shown when a row is clicked) -->
+      <!-- Invoice detail panel -->
       <div class="invoice-detail-panel" id="invoiceDetailPanel" hidden>
         <div class="invoice-detail-header">
           <h2 id="detailInvoiceNumber">—</h2>
@@ -278,21 +281,18 @@
         </table>
       </div>
     </section>
-    <section id="comparisonPanel" class="comparison-panel" hidden>
-    <div class="comparison-header">
-        <h2>3-Way Document Comparison</h2>
-        <button id="closeComparisonBtn" class="btn-secondary">
-            Close
-        </button>
-    </div>
 
-    <p class="comparison-subtitle">
-        Compare Invoice, Purchase Order and Goods Receipt side by side.
-    </p>
-    <div id="comparisonSummary"></div>
-    <div id="comparisonFields"></div>
-    <div id="comparisonLineItems" class="comparison-line-items"></div>
-</section>
+    <!-- ---- VIEW: 3-WAY DOCUMENT COMPARISON ---- -->
+    <section class="view comparison-panel" id="comparisonPanel" hidden>
+      <div class="comparison-header">
+        <h2>3-Way Document Comparison</h2>
+        <button id="closeComparisonBtn" class="btn-secondary">Close</button>
+      </div>
+      <p class="comparison-subtitle">Compare Invoice, Purchase Order and Goods Receipt side by side.</p>
+      <div id="comparisonSummary"></div>
+      <div id="comparisonFields"></div>
+      <div id="comparisonLineItems" class="comparison-line-items"></div>
+    </section>
 
   </main>
 </div>
