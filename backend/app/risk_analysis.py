@@ -3,7 +3,7 @@ from backend.app.helper import get_vendor_history
 from backend.app.dbs.risk_db import get_vendor_decisions
 
 
-def assess_risk(invoice: dict, match_result: MatchResult,invoice_confidences: dict) -> dict:
+def assess_risk(invoice: dict, match_result: MatchResult,invoice_confidences: dict, anomaly_result) -> dict:
     score = 0
     reasons = []
     vendor_history = get_vendor_history(vendor_name=invoice['vendor_name'])
@@ -25,6 +25,15 @@ def assess_risk(invoice: dict, match_result: MatchResult,invoice_confidences: di
     if vendor_history.get("is_new_vendor"):
         score += 10
         reasons.append("New/unseen vendor")
+
+    # ML anomaly signal
+    if anomaly_result and anomaly_result.get("is_anomaly"):
+        score += 25
+        model = anomaly_result.get("model_used", "unknown")
+        reasons.append(
+            f"ML anomaly detected (score {anomaly_result.get('anomaly_score', 0):.3f}, "
+            f"model: {model})"
+        )
     
     vendor_name = invoice.get("vendor_name", "")
     past_decisions = get_vendor_decisions(vendor_name)
