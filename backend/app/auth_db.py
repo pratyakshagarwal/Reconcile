@@ -46,6 +46,7 @@ def init_auth_db():
     cur.execute("ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS decided_by INTEGER REFERENCES users(id)")
     cur.execute("ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS decided_at TIMESTAMP")
     cur.execute("ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS reviewer_note TEXT")
+    cur.execute("ALTER TABLE pipeline_runs ADD COLUMN IF NOT EXISTS thread_id TEXT")
     create_reviewer_decisions_table()
 
     conn.commit()
@@ -79,13 +80,14 @@ def get_user_by_email(email: str) -> dict | None:
     return {"id": row[0], "email": row[1], "password_hash": row[2]}
 
 
-def insert_pipeline_run(user_id: int, invoice_id: int | None, status: str, report: dict | None) -> int:
+def insert_pipeline_run(user_id: int, invoice_id: int | None, status: str, report: dict | None, thread_id: str=None) -> int:
+
     conn = get_connection()
     cur = conn.cursor()
     cur.execute(
-        """INSERT INTO pipeline_runs (user_id, invoice_id, status, report)
-           VALUES (%s, %s, %s, %s) RETURNING id""",
-        (user_id, invoice_id, status, json.dumps(report) if report else None)
+        """INSERT INTO pipeline_runs (user_id, invoice_id, status, report, thread_id)
+           VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+        (user_id, invoice_id, status, json.dumps(report) if report else None, thread_id)
     )
     run_id = cur.fetchone()[0]
     conn.commit()
@@ -195,3 +197,20 @@ def update_run_decision(
         )
 
     return updated
+
+
+def update_run_report(run_id: int, report: dict, status: str):
+    conn = get_connection()
+    cur = conn.cursor()
+    import json
+    cur.execute(
+        """UPDATE pipeline_runs
+           SET report = %s, status = %s
+           WHERE id = %s""",
+        (json.dumps(report) if report else None, status, run_id)
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+if __name__ == '__main__':init_auth_db()
