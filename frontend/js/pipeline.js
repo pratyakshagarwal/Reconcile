@@ -3,6 +3,7 @@
    Depends on: authFetch (auth.js), showView/els (main.js), renderReport (report.js)
    ============================================================ */
 
+let extractionCompletedCount = 0;
 const NODE_SEQUENCE = [
   { key: "extraction", label: "Extracting document fields" },
   { key: "validation", label: "Validating extracted data" },
@@ -138,6 +139,31 @@ async function consumeStream(body) {
 }
 
 function handleStreamEvent(eventName, data) {
+  // Remap the three fan-out extraction nodes to the single "extraction" UI row
+  const EXTRACTION_NODES = ["extract_Invoice", "extract_PurchaseOrder", "extract_GoodReceipt"];
+
+  if (EXTRACTION_NODES.includes(data.node)) {
+    if (eventName === "node_start") {
+      // Only activate the row on the first one to fire
+      const row = document.getElementById("stage-extraction");
+      if (row) row.classList.add("active");
+    }
+    if (eventName === "node_complete") {
+      extractionCompletedCount++;
+      if (extractionCompletedCount >= 3) {
+        // All three done — mark the row complete
+        const row = document.getElementById("stage-extraction");
+        if (row) {
+          row.classList.remove("active");
+          row.classList.add("complete");
+          const detail = row.querySelector(".stage-detail");
+          if (detail) detail.textContent = "invoice, PO and GR extracted";
+        }
+        extractionCompletedCount = 0; // reset for next run
+      }
+    }
+    return; // don't fall through to the normal handler
+  }
   if (eventName === "node_start") {
     const row = document.getElementById(`stage-${data.node}`);
     if (row) row.classList.add("active");
@@ -163,7 +189,37 @@ function handleStreamEvent(eventName, data) {
       attachStageLogs(row, logs);
     }
   }
+  if (eventName === "interrupted") {
+    currentRunId    = data.run_id;
+    currentThreadId = data.thread_id;
 
+    // Mark approval row as "waiting"
+    const approvalRow = document.getElementById("stage-approval");
+    if (approvalRow) {
+      approvalRow.classList.remove("active");
+      approvalRow.classList.add("interrupted");
+      const detail = approvalRow.querySelector(".stage-detail");
+      if (detail) detail.textContent = "waiting for your decision";
+    }
+
+    // Update header so it doesn't look frozen
+    els.pipelineTitle.textContent = "Review required";
+    document.getElementById("pipelineSub").textContent =
+      "The pipeline has paused for human review. Approve or reject to continue.";
+
+    // Show buttons
+    const actions  = document.getElementById("decisionActions");
+    const resultEl = document.getElementById("decisionResult");
+    const approveBtn = document.getElementById("approveBtn");
+    const rejectBtn  = document.getElementById("rejectBtn");
+
+    actions.hidden = false;
+
+    approveBtn.onclick = () => submitDecision(currentRunId, "approved", actions, resultEl);
+    rejectBtn.onclick  = () => submitDecision(currentRunId, "rejected", actions, resultEl);
+
+    return;
+  }
   if (eventName === "done") {
     currentRunId = data.run_id;
     setTimeout(() => renderReport(data.report, data.status), 500);
