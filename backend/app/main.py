@@ -16,13 +16,19 @@ Protected routes (require Authorization: Bearer <token>):
 Run with: uvicorn app.main:app --reload
 """
 
+import os
 import json
 import shutil
 import tempfile
 import uuid
 from pathlib import Path
 from typing import Optional
+from dotenv import load_dotenv
 
+from contextlib import asynccontextmanager
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.errors import GraphInterrupt
+from langgraph.types import Command
 from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -36,12 +42,26 @@ from backend.app.agent import create_graph, nodes, paths
 from backend.app.db import get_connection
 from backend.app.auth import hash_password, verify_password, create_access_token, get_current_user_id
 from backend.app.auth_db import (
-    init_auth_db, create_user, get_user_by_email,
+    init_auth_db, create_user, get_user_by_email, update_run_report,
     insert_pipeline_run, list_pipeline_runs, get_pipeline_run,
     VALID_DECISIONS, update_run_decision
 )
 
-app = FastAPI(title="Invoice Automation Pipeline")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    with PostgresSaver.from_conn_string(os.getenv("DB_URL")) as checkpointer:
+        checkpointer.setup()
+
+        app.state.checkpointer = checkpointer
+        app.state.pipeline = create_graph(
+            nodes,
+            paths,
+            checkpointer=checkpointer
+        )
+
+        yield
+
+app = FastAPI(title="Invoice Automation Pipeline", lifespan=lifespan)
 # init_auth_db()  # ensures users/pipeline_runs tables + user_id columns exist on startup
 
 # Allow the frontend dev server to call this API during local development.
@@ -54,8 +74,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-pipeline = create_graph(nodes, paths)
-
 # ============================================================
 # AUTH ROUTES
 # ============================================================
@@ -63,8 +81,7 @@ pipeline = create_graph(nodes, paths)
 class SignupRequest(BaseModel):
     email: EmailStr
     password: str
-
-
+    
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -146,90 +163,184 @@ async def process_invoice(
     gr: Optional[UploadFile] = File(None),
     user_id: int = Depends(get_current_user_id),
 ):
-    """
-    Upload invoice (+ optional PO/GR), stream each pipeline node's result as it completes.
-    Requires a valid Bearer token — the resulting run is recorded under the calling user.
-
-    Event stream shape:
-      event: node_start   data: {"node": "...", "label": "..."}
-      event: node_complete data: {"node": "...", "label": "...", "state_delta": {...}}
-      event: done          data: {"status": "...", "report": {...} | null, "run_id": int}
-      event: error         data: {"node": "...", "message": "..."}
-    """
-    run_id_str = str(uuid.uuid4())
-    tmp_dir = Path(tempfile.mkdtemp(prefix=f"invoice_{run_id_str}_"))
+    run_id = str(uuid.uuid4())
+    tmp_dir = Path(tempfile.mkdtemp(prefix=f"invoice_{run_id}_"))
 
     try:
         invoice_path = save_upload(invoice, tmp_dir)
         po_path = save_upload(po, tmp_dir)
         gr_path = save_upload(gr, tmp_dir)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to save uploaded files: {e}")
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to save uploaded files: {e}",
+        )
 
     initial_state = {
         "invoice_path": invoice_path,
         "po_path": po_path,
         "gr_path": gr_path,
-        "user_id": user_id ,
+        "user_id": user_id,
     }
 
     async def event_generator():
         final_state = {}
-        try:
-            # .stream() yields {node_name: state_after_that_node} after each step
-            for step in pipeline.stream(initial_state):
-                for node_name, state_delta in step.items():
-                    label = NODE_LABELS.get(node_name, node_name)
-                    yield sse_event("node_start", {"node": node_name, "label": label})
+        interrupted = False
+        interrupt_value = None
+        thread_id = str(uuid.uuid4())
+        config = {"configurable": {"thread_id": thread_id}}
 
+        try:
+            for step in app.state.pipeline.stream(initial_state, config=config):
+                for node_name, state_delta in step.items():
+                    if node_name == "__interrupt__":
+                        interrupted = True
+                        interrupt_value = state_delta[0].value
+                        continue
+
+                    if not isinstance(state_delta, dict):
+                        continue
+
+                    label = NODE_LABELS.get(node_name, node_name)
                     final_state.update(state_delta)
 
-                    yield sse_event("node_complete", {
-                        "node": node_name,
-                        "label": label,
-                        "state_delta": jsonable(state_delta),
-                    })
+                    yield sse_event(
+                        "node_start",
+                        {"node": node_name, "label": label},
+                    )
+                    yield sse_event(
+                        "node_complete",
+                        {
+                            "node": node_name,
+                            "label": label,
+                            "state_delta": jsonable(state_delta),
+                        },
+                    )
 
-            final_status = final_state.get("status", "processed")
-            final_report = jsonable(final_state.get("report"))
-
-            # Persist this run under the calling user — this is the actual session history.
-            db_run_id = insert_pipeline_run(
-                user_id=user_id,
-                invoice_id=final_state.get("invoice_id"),  # set this once insert_invoice() runs inside your graph and you thread its id back into state
-                status=final_status,
-                report=final_report,
-            )
-
-            yield sse_event("done", {
-                "status": final_status,
-                "report": final_report,
-                "run_id": db_run_id,
-            })
+        except GraphInterrupt as e:
+            interrupted = True
+            interrupt_value = e.args[0][0].value if e.args else {}
 
         except Exception as e:
             yield sse_event("error", {"message": str(e)})
+            return
 
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+        if interrupted:
+            db_run_id = insert_pipeline_run(
+                user_id=user_id,
+                invoice_id=final_state.get("invoice_db_id"),
+                status="pending_review",
+                report=None,
+                thread_id=thread_id,
+            )
 
-@app.post("/api/runs/{run_id}/decide")
-def decide_run(
+            yield sse_event(
+                "interrupted",
+                {
+                    "message": interrupt_value.get(
+                        "message",
+                        "Pending Human Review",
+                    ),
+                    "thread_id": thread_id,
+                    "run_id": db_run_id,
+                    "status": "pending_review",
+                },
+            )
+            return
+
+        final_status = final_state.get("status", "processed")
+        final_report = jsonable(final_state.get("report"))
+
+        db_run_id = insert_pipeline_run(
+            user_id=user_id,
+            invoice_id=final_state.get("invoice_db_id"),
+            status=final_status,
+            report=final_report,
+            thread_id=thread_id,
+        )
+
+        yield sse_event(
+            "done",
+            {
+                "status": final_status,
+                "report": final_report,
+                "run_id": db_run_id,
+                "thread_id": thread_id,
+            },
+        )
+
+    return StreamingResponse( event_generator(), media_type="text/event-stream",)
+
+@app.post("/api/runs/{run_id}/resume")
+def resume_run(
     run_id: int,
     decision: str,
     note: str | None = None,
+    thread_id: str = None,
     user_id: int = Depends(get_current_user_id),
 ):
     if decision not in VALID_DECISIONS:
-        raise HTTPException(status_code=400, detail=f"decision must be one of {VALID_DECISIONS}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"decision must be one of {VALID_DECISIONS}",
+        )
 
-    updated = update_run_decision(run_id, user_id, decision, note or "")
-    if not updated:
-        raise HTTPException(status_code=404, detail="Run not found.")
+    if not thread_id:
+        raise HTTPException(
+            status_code=400,
+            detail="thread_id required",
+        )
 
-    return {"run_id": run_id, "decision": decision, "note": note}
+    config = {"configurable": {"thread_id": thread_id}}
+
+    try:
+        final_state = {}
+
+        for step in app.state.pipeline.stream(
+            Command(
+                resume={
+                    "decision": decision,
+                    "note": note or "",
+                }
+            ),
+            config=config,
+        ):
+            for node_name, state_delta in step.items():
+                if isinstance(state_delta, dict):
+                    final_state.update(state_delta)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    final_report = jsonable(final_state.get("report"))
+    final_status = final_state.get("status", "processed")
+
+    update_run_report(
+        run_id,
+        final_report,
+        final_status,
+    )
+
+    update_run_decision(
+        run_id,
+        user_id,
+        decision,
+        note or "",
+    )
+
+    print("FINAL STATE KEYS:", list(final_state.keys()))
+    print("REPORT:", final_report)
+
+    return {
+        "run_id": run_id,
+        "decision": decision,
+        "report": final_report,
+        "status": final_status,
+    }
 
 def jsonable(value):
     """Best-effort conversion of pipeline state values into JSON-safe primitives."""
