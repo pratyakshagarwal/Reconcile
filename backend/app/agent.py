@@ -1,7 +1,9 @@
-from typing import TypedDict, Optional, List, Dict
+from typing import TypedDict, Optional, List, Dict, Annotated
 from langgraph.graph import StateGraph, END, START
+from langgraph.types import Send
+from langgraph.types import interrupt
 
-from backend.app.extracter import extract
+from backend.app.extracter import extract, extract_invoice, extract_po, extract_gr
 from backend.app.validator import validate_invoice
 from backend.app.db import (
     check_duplicate,check_duplicate_gr, check_duplicate_po, 
@@ -33,16 +35,19 @@ def startup_train():
 startup_train()
 _anomaly_models = load_models()  # load once into memory, reused per request
 
+def merge_optional(a, b):
+    """Keep whichever value is not None."""
+    return b if b is not None else a
 class PipelineState(TypedDict):
     invoice_path: str
     po_path: Optional[str]
     gr_path: Optional[str]
-    invoice: Optional[dict]
+    invoice: Annotated[Optional[dict], merge_optional]
     invoice_id: Optional[int]
-    po: Optional[dict]
-    gr: Optional[dict]
+    po: Annotated[Optional[dict], merge_optional]
+    gr: Annotated[Optional[dict], merge_optional]
     user_id: Optional[int]
-    invoice_confidences: Optional[dict]
+    invoice_confidences: Annotated[Optional[dict], merge_optional]
     is_valid: Optional[bool]
     validation_errors: Optional[list]
     is_duplicate: Optional[bool]
@@ -54,21 +59,38 @@ class PipelineState(TypedDict):
     report: Optional[dict]
     status: Optional[str]  # used to short-circuit on duplicate/invalid
     warnings: List[Dict]
+    thread_id: Optional[str]         # stored so fr
 
-
-def extraction_node(state: PipelineState) -> PipelineState:
-    invoice, po, gr = extract(state["invoice_path"], state["po_path"], state["gr_path"])
-    
-    raw_invoice = invoice.model_dump() if invoice else None
-    confidences = extract_confidences(raw_invoice) if raw_invoice else None  # keep these separately
-    
+def extract_Invoice(state: PipelineState) -> PipelineState:
+    invoice = extract_invoice(state["invoice_path"])
     return {
-        **state,
-        "invoice": unwrap_confident_fields(raw_invoice) if raw_invoice else None,
-        "invoice_confidences": confidences,  # stashed for the Risk Agent to use later
-        "po": po.model_dump() if po else None,
-        "gr": gr.model_dump() if gr else None,
+        "invoice": unwrap_confident_fields(invoice.model_dump()) if invoice else None,
+        "invoice_confidences": extract_confidences(invoice.model_dump()) if invoice else {},
     }
+
+def extract_PurchaseOrder(state: PipelineState) -> PipelineState:
+    if not state.get("po_path"):
+        return {"po": None}
+    po = extract_po(state["po_path"])
+    return {"po": po.model_dump() if po else None}
+
+def extract_GoodReceipt(state: PipelineState) -> PipelineState:
+    if not state.get("gr_path"):
+        return {"gr": None}
+    gr = extract_gr(state["gr_path"])
+    return {"gr": gr.model_dump() if gr else None}
+
+def dispatch_extraction(state: PipelineState) -> list:
+    """Fan out to parallel extraction nodes."""
+    tasks = [Send("extract_Invoice", state)]  # pass full state so nodes can read their paths
+
+    if state.get("po_path"):
+        tasks.append(Send("extract_PurchaseOrder", state))
+
+    if state.get("gr_path"):
+        tasks.append(Send("extract_GoodReceipt", state))
+
+    return tasks
 
 def validation_node(state: PipelineState) -> PipelineState:
     is_valid, errors = validate_invoice(state["invoice"])
@@ -146,12 +168,53 @@ def risk_node(state: PipelineState) -> PipelineState:
     risk = assess_risk(state["invoice"], match_result, state['invoice_confidences'], anomaly)
     return {**state, "risk": risk}
 
-
 def approval_node(state: PipelineState) -> PipelineState:
     match_result = MatchResult(**state["match_result"])
-    approval = route_approval(state["invoice"], state["risk"], match_result)
-    return {**state, "approval": approval}
+    risk = state.get("risk", {})
 
+    approval = route_approval(
+        state["invoice"],
+        risk,
+        match_result
+    )
+
+    approval["source"] = "automated"
+
+    print("APPROVAL:", approval)
+
+    if approval["decision"] == "needs_review":
+
+        human_input = interrupt({
+            "message": "Rejected by Reconcile — Pending Human Review",
+            "approval": approval
+        })
+
+        decision = (
+            human_input.get("decision")
+            if isinstance(human_input, dict)
+            else human_input
+        )
+
+        note = (
+            human_input.get("note", "")
+            if isinstance(human_input, dict)
+            else ""
+        )
+
+        return {
+            **state,
+            "approval": {
+                "decision": decision,
+                "approver": "human_reviewer",
+                "note": note,
+                "source": "human",
+            }
+        }
+
+    return {
+        **state,
+        "approval": approval
+    }
 
 def report_node(state: PipelineState) -> PipelineState:
     report = generate_report(
@@ -175,32 +238,37 @@ def route_after_duplicate(state: PipelineState) -> str:
 
 
 nodes = [
-    ('extraction', extraction_node),
-    ('validation', validation_node),
-    ('duplicate_detect', duplicate_node),
-    ('3_way_matching', matching_node),
-    ('classify', classification_node),
-    ('anomaly_detect', anomaly_node),
-    ('risk_analysis', risk_node),
-    ('approval', approval_node),
-    ('report_gen', report_node)
+    ("extract_Invoice", extract_Invoice),
+    ("extract_PurchaseOrder", extract_PurchaseOrder),
+    ("extract_GoodReceipt", extract_GoodReceipt),
+    ("validation", validation_node),
+    ("duplicate_detect", duplicate_node),
+    ("3_way_matching", matching_node),
+    ("classify", classification_node),
+    ("anomaly_detect", anomaly_node),
+    ("risk_analysis", risk_node),
+    ("approval", approval_node),
+    ("report_gen", report_node),
 ]
 
 paths = [
-    (START, 'extraction'),
-    ('extraction', 'validation'),
-    ('validation', route_after_validation, 'conditional_routing'),
-    ('duplicate_detect', route_after_duplicate, 'conditional_routing'),
-    ('3_way_matching', 'classify'),
+    (START, dispatch_extraction, "fan_out"),
+
+    ("extract_Invoice", "validation"),
+    ("extract_PurchaseOrder", "validation"),
+    ("extract_GoodReceipt", "validation"),
+
+    ("validation", route_after_validation, "conditional_routing"),
+    ("duplicate_detect", route_after_duplicate, "conditional_routing"),
+    ("3_way_matching", "classify"),
     ("classify", "anomaly_detect"),
     ("anomaly_detect", "risk_analysis"),
-    ('risk_analysis', 'approval'),
-    ('approval', 'report_gen'),
-    ('report_gen', END)
+    ("risk_analysis", "approval"),
+    ("approval", "report_gen"),
+    ("report_gen", END),
 ]
 
-
-def create_graph(nodes, paths):
+def create_graph(nodes, paths, checkpointer=None):
     graph = StateGraph(PipelineState)
 
     for name, fn in nodes:
@@ -211,10 +279,20 @@ def create_graph(nodes, paths):
             strt, dstn = path
             graph.add_edge(strt, dstn)
         else:
-            strt, route_fn, _ = path
-            graph.add_conditional_edges(strt, route_fn)
+            strt, route_fn, label = path
+            if label == "fan_out":
+                # Parallel fan-out — dispatch_extraction returns list of Send objects
+                graph.add_conditional_edges(
+                    strt,
+                    route_fn,
+                    ["extract_Invoice", "extract_PurchaseOrder", "extract_GoodReceipt"]
+                )
+            else:
+                # Normal conditional routing
+                graph.add_conditional_edges(strt, route_fn)
 
-    pipeline = graph.compile()
+    pipeline = graph.compile(
+        checkpointer=checkpointer)
     return pipeline
 
 
