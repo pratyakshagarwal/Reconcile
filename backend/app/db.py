@@ -1,4 +1,6 @@
 import psycopg2, os
+from dotenv import load_dotenv
+load_dotenv()
 
 def get_connection():
     return psycopg2.connect(os.getenv("DB_URL"))
