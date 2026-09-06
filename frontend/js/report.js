@@ -5,6 +5,7 @@
    ============================================================ */
 
 let currentRunId = null; // tracks which run is currently shown in the report view
+let currentThreadId = null; // Tracks the Thread Id for the run
 
 function renderReport(report, status) {
   if (!report) {
@@ -101,6 +102,10 @@ function setupDecisionButtons(report, runId) {
   const approveBtn = document.getElementById("approveBtn");
   const rejectBtn = document.getElementById("rejectBtn");
 
+   if (!runId || !currentThreadId) {
+      resultEl.textContent = `Error: missing run_id (${runId}) or thread_id (${currentThreadId})`;
+      return;
+    }
   resultText.textContent = "";
   document.getElementById("reviewerNote").value = ""; 
 
@@ -112,22 +117,45 @@ function setupDecisionButtons(report, runId) {
 }
 
 async function submitDecision(runId, decision, actionsEl, resultEl) {
+  console.log("SUBMIT DECISION CALLED");
+  console.log("runId:", runId);
+  console.log("decision:", decision);
+  console.log("threadId:", currentThreadId);
   const noteEl = document.getElementById("reviewerNote");
-  const note = noteEl.value.trim() || null; // null if empty, exactly as you want
+  const note = noteEl.value.trim() || null;
 
   try {
-    const url = note
-      ? `/api/runs/${runId}/decide?decision=${decision}&note=${encodeURIComponent(note)}`
-      : `/api/runs/${runId}/decide?decision=${decision}`;
+    const params = new URLSearchParams({
+      decision: decision,
+      thread_id: currentThreadId,
+    });
 
-    const res = await authFetch(url, { method: "POST" });
+    if (note) {
+      params.set("note", note);
+    }
+
+    console.log("RESUMING:", `/api/runs/${runId}/resume`);
+    const res = await authFetch(
+      `/api/runs/${runId}/resume?${params.toString()}`,
+      { method: "POST" }
+    );
+    console.log("RESUME RESPONSE:", res.status);
+
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.detail || "Could not record decision.");
+      throw new Error(err.detail || "Could not resume pipeline.");
     }
+
+    const data = await res.json();
+
     actionsEl.hidden = true;
-    resultEl.textContent = `Decision recorded: ${decision}${note ? ` — "${note}"` : ""}`;
+    resultEl.textContent = `Decision recorded: ${decision}`;
+
+    currentRunId = data.run_id;
+
+    renderReport(data.report, data.status);
     loadHistory();
+
   } catch (err) {
     resultEl.textContent = `Error: ${err.message}`;
   }
