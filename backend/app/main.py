@@ -331,10 +331,6 @@ def resume_run(
         decision,
         note or "",
     )
-
-    print("FINAL STATE KEYS:", list(final_state.keys()))
-    print("REPORT:", final_report)
-
     return {
         "run_id": run_id,
         "decision": decision,

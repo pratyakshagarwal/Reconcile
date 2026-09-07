@@ -117,10 +117,6 @@ function setupDecisionButtons(report, runId) {
 }
 
 async function submitDecision(runId, decision, actionsEl, resultEl) {
-  console.log("SUBMIT DECISION CALLED");
-  console.log("runId:", runId);
-  console.log("decision:", decision);
-  console.log("threadId:", currentThreadId);
   const noteEl = document.getElementById("reviewerNote");
   const note = noteEl.value.trim() || null;
 
@@ -134,12 +130,10 @@ async function submitDecision(runId, decision, actionsEl, resultEl) {
       params.set("note", note);
     }
 
-    console.log("RESUMING:", `/api/runs/${runId}/resume`);
     const res = await authFetch(
       `/api/runs/${runId}/resume?${params.toString()}`,
       { method: "POST" }
     );
-    console.log("RESUME RESPONSE:", res.status);
 
     if (!res.ok) {
       const err = await res.json();
