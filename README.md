@@ -1,10 +1,12 @@
-title	Ledger
-emoji	🚀
-colorFrom	blue
-colorTo	indigo
-sdk	docker
-app_port	7860
-pinned	false
+---
+title: Ledger
+emoji: 🚀
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
 
 # Reconcile
 Agentic Accounts Payable automation for validating, reconciling, and reviewing invoices before payment.
